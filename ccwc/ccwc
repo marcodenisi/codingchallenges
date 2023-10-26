@@ -1,0 +1,122 @@
+///usr/bin/env jbang "$0" "$@" ; exit $?
+
+//DEPS info.picocli:picocli:4.7.5
+
+import static java.lang.System.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.function.Function;
+import java.util.stream.Stream;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
+
+public class Ccwc implements Callable<Integer> {
+
+    @Option(names = "-c", description = "count the file's bytes")
+    private boolean countBytes;
+  
+    @Option(names = "-l", description = "count the file's lines")
+    private boolean countLines;
+  
+    @Option(names = "-w", description = "count the file's words")
+    private boolean countWords;
+  
+    @Option(names = "-m", description = "count the file's characters")
+    private boolean countChars;
+  
+    @Parameters(index = "0", description = "The file whose length to calculate.")
+    private Optional<File> inputFile = Optional.empty();;
+  
+    private Function<String, Long> countBytesFunc = in -> (long) in.getBytes().length;
+    
+    private Function<String, Long> countLinesFunc = in -> (long)in.split("\\n").length + 1;
+    
+    private Function<String, Long> countWordsFunc = in -> 
+        (long) Stream.of(in.split("\\n"))
+            .filter(line -> !line.isEmpty())
+            .map(String::strip)
+            .map(line -> line.split("\\s+"))
+            .map(tokens -> tokens.length)
+            .reduce(0, Integer::sum);
+
+    private Function<String, Long> countCharsFunc = in -> 
+        (long) Stream.of(in.split("\\n"))
+            .map(s -> s.length() + 1)
+            .reduce(0, Integer::sum) + 1;
+
+    public static void main(String... args) throws Exception {
+        final var command = new CommandLine(new Ccwc());
+        if (args.length == 0) {
+            System.exit(((Callable<Integer>) command.getCommand()).call());
+        }
+        System.exit(command.execute(args));
+    }
+
+    @Override
+    public Integer call() throws IOException {
+        final var input =
+            inputFile
+                .map(file -> {
+                    try {
+                        final var is = new FileInputStream(file);
+                        return new String(is.readAllBytes());
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .orElse(readInput());
+        final var fileName = inputFile.map(File::getName).orElse("");
+
+        var count = 0L;
+        if (countBytes) {
+            count = this.countBytesFunc.apply(input);
+            System.out.printf("%s %s%n", count, fileName);
+        } else if (countLines) {
+            count = this.countLinesFunc.apply(input);
+            System.out.printf("%s %s%n", count, fileName);
+        } else if (countWords) {
+            count = this.countWordsFunc.apply(input);
+            System.out.printf("%s %s%n", count, fileName);
+        } else if (countChars) {
+            count = this.countCharsFunc.apply(input);
+            System.out.printf("%s %s%n", count, fileName);
+        } else {
+            var bytes = this.countBytesFunc.apply(input);
+            var lines = this.countLinesFunc.apply(input);
+            var words = this.countWordsFunc.apply(input);
+
+            System.out.printf("%s %s %s %s%n", lines, words, bytes, fileName);
+        }
+
+        return 0;
+    }
+
+    private String readInput() throws IOException {
+        if (System.in.available() == 0) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        String line;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
+          while (true) {
+            if ((line = reader.readLine()) != null) {
+                sb.append(line);
+            } else {
+              break;
+            }
+          }
+        } catch (Exception e) {
+          System.err.println(e);
+        }
+        return sb.toString();
+      }
+}
